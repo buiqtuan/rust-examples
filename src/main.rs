@@ -53,17 +53,11 @@ fn main() {
                 let mut data = String::new();
                 match _stream.read_to_string(&mut data) {
                     Ok(_) => {
-                        let http_request = parse_http_string(&data);
-
-                        if http_request
-                            .unwrap()
-                            .headers
-                            .unwrap()
-                            .host
-                            .unwrap()
-                            .contains(&"abcdefg")
-                        {
-                            match _stream.borrow().write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()) {
+                        if data.starts_with("GET / HTTP/1.1\r\n") {
+                            match _stream
+                                .borrow()
+                                .write("HTTP/1.1 200 OK\r\n\r\n".as_bytes())
+                            {
                                 Ok(written_byte) => {
                                     println!("{} bytes written successfully!", written_byte);
                                 }
@@ -72,7 +66,10 @@ fn main() {
                                 }
                             };
                         } else {
-                            match _stream.borrow().write("HTTP/1.1 200 OK\r\n\r\n\r\n\r\n".as_bytes()) {
+                            match _stream
+                                .borrow()
+                                .write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
+                            {
                                 Ok(written_byte) => {
                                     println!("{} bytes written successfully!", written_byte);
                                 }
@@ -81,6 +78,35 @@ fn main() {
                                 }
                             };
                         }
+
+                        // let http_request = parse_http_string(&data);
+
+                        // if http_request
+                        //     .unwrap()
+                        //     .headers
+                        //     .unwrap()
+                        //     .host
+                        //     .unwrap()
+                        //     .contains(&"abcdefg")
+                        // {
+                        //     match _stream.borrow().write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()) {
+                        //         Ok(written_byte) => {
+                        //             println!("{} bytes written successfully!", written_byte);
+                        //         }
+                        //         Err(e) => {
+                        //             panic!("Fail {}", e);
+                        //         }
+                        //     };
+                        // } else {
+                        //     match _stream.borrow().write("HTTP/1.1 200 OK\r\n\r\n\r\n\r\n".as_bytes()) {
+                        //         Ok(written_byte) => {
+                        //             println!("{} bytes written successfully!", written_byte);
+                        //         }
+                        //         Err(e) => {
+                        //             panic!("Fail {}", e);
+                        //         }
+                        //     };
+                        // }
                     }
                     Err(e) => {
                         println!("Failed to read from the stream: {}", e);
@@ -91,15 +117,6 @@ fn main() {
                 println!("error: {}", e);
             }
         }
-    }
-
-    let string = "GET /index.html HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n".to_string();
-
-    match parse_http_string(&string) {
-        Ok(h) => {
-            println!("{:?}", h);
-        }
-        Err(_) => {}
     }
 }
 
