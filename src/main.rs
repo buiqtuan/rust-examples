@@ -53,32 +53,14 @@ fn main() {
                 let mut data = String::new();
                 match _stream.read_to_string(&mut data) {
                     Ok(_) => {
-                        if data.starts_with("GET / HTTP/1.1\r\n") {
-                            match _stream
-                                .borrow()
-                                .write("HTTP/1.1 200 OK\r\n\r\n".as_bytes())
-                            {
-                                Ok(written_byte) => {
-                                    println!("{} bytes written successfully!", written_byte);
-                                }
-                                Err(e) => {
-                                    panic!("Fail {}", e);
-                                }
-                            };
+                        let get = "GET / HTTP/1.1\r\n";
+                        let response = if data.starts_with(get) {
+                            "HTTP/1.1 200 OK\r\n\r\n"
                         } else {
-                            match _stream
-                                .borrow()
-                                .write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
-                            {
-                                Ok(written_byte) => {
-                                    println!("{} bytes written successfully!", written_byte);
-                                }
-                                Err(e) => {
-                                    panic!("Fail {}", e);
-                                }
-                            };
-                        }
-
+                            "HTTP/1.1 404 Not Found\r\n\r\n"
+                        };
+                        _stream.write(response.as_bytes()).unwrap();
+                        _stream.flush().unwrap();
                         // let http_request = parse_http_string(&data);
 
                         // if http_request
