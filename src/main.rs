@@ -5,7 +5,7 @@ use std::{
     borrow::Borrow,
     error::Error,
     io::{Read, Write},
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
 };
 
 use itertools::Itertools;
@@ -50,56 +50,28 @@ fn main() {
     for stream in listener.incoming() {
         match stream {
             Ok(mut _stream) => {
-                let mut data = String::new();
-                match _stream.read_to_string(&mut data) {
-                    Ok(_) => {
-                        let get = "GET / HTTP/1.1\r\n";
-                        let response = if data.starts_with(get) {
-                            "HTTP/1.1 200 OK\r\n\r\n"
-                        } else {
-                            "HTTP/1.1 404 Not Found\r\n\r\n"
-                        };
-                        _stream.write(response.as_bytes()).unwrap();
-                        _stream.flush().unwrap();
-                        // let http_request = parse_http_string(&data);
-
-                        // if http_request
-                        //     .unwrap()
-                        //     .headers
-                        //     .unwrap()
-                        //     .host
-                        //     .unwrap()
-                        //     .contains(&"abcdefg")
-                        // {
-                        //     match _stream.borrow().write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()) {
-                        //         Ok(written_byte) => {
-                        //             println!("{} bytes written successfully!", written_byte);
-                        //         }
-                        //         Err(e) => {
-                        //             panic!("Fail {}", e);
-                        //         }
-                        //     };
-                        // } else {
-                        //     match _stream.borrow().write("HTTP/1.1 200 OK\r\n\r\n\r\n\r\n".as_bytes()) {
-                        //         Ok(written_byte) => {
-                        //             println!("{} bytes written successfully!", written_byte);
-                        //         }
-                        //         Err(e) => {
-                        //             panic!("Fail {}", e);
-                        //         }
-                        //     };
-                        // }
-                    }
-                    Err(e) => {
-                        println!("Failed to read from the stream: {}", e);
-                    }
-                }
+                handle_connection(_stream);
             }
             Err(e) => {
                 println!("error: {}", e);
             }
         }
     }
+}
+
+fn handle_connection(mut stream: TcpStream) {
+    let mut buffer = [0; 1024];
+    stream.read(&mut buffer).unwrap();
+
+    println!("Request: {}", String::from_utf8_lossy(&buffer[..]));
+    let get = b"GET / HTTP/1.1\r\n";
+    let response = if buffer.starts_with(get) {
+        "HTTP/1.1 200 OK\r\n\r\n"
+    } else {
+        "HTTP/1.1 404 Not Found\r\n\r\n"
+    };
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
 }
 
 fn parse_http_string(http_string: &str) -> Result<HttpRequest, String> {
