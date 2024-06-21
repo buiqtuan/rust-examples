@@ -2,27 +2,21 @@
 // use std::net::TcpListener;
 
 use std::{
-    borrow::Borrow,
-    error::Error,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
 };
 
-use itertools::Itertools;
-use nom::Err;
-
 #[derive(Debug)]
 struct RequestLine {
-    method: Option<String>,
-    target: Option<String>,
-    version: Option<String>,
+    method: String,
+    uri: String,
+    version: String,
 }
 
 #[derive(Debug)]
 struct Header {
-    host: Option<String>,
-    user_agent: Option<String>,
-    accept: Option<String>,
+    key: String,
+    value: String,
 }
 
 #[derive(Debug)]
@@ -30,9 +24,9 @@ struct Body {}
 
 #[derive(Debug)]
 struct HttpRequest {
-    request_line: Option<RequestLine>,
-    headers: Option<Header>,
-    body: Option<Body>,
+    request_line: RequestLine,
+    headers: Vec<Header>,
+    body: Option<String>,
 }
 
 fn main() {
@@ -41,17 +35,20 @@ fn main() {
 
     // Uncomment this block to pass the first stage
 
-    let mut request_line = Vec::<String>::new();
-    let mut headers = Vec::<String>::new();
-    let mut request_body = Vec::<String>::new();
-
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
     for stream in listener.incoming() {
         match stream {
-            Ok(mut _stream) => {
-                handle_connection(_stream);
-            }
+            Ok(mut _stream) => match handle_connection(_stream) {
+                Ok(request) => {
+                    if request.request_line.uri.contains("echo/") {
+                        let path = request.request_line.uri.splitn(2, "echo/").collect::<Vec<&str>>()[1];
+                    }
+                }
+                Err(e) => {
+                    println!("{e}");
+                }
+            },
             Err(e) => {
                 println!("error: {}", e);
             }
@@ -59,63 +56,84 @@ fn main() {
     }
 }
 
-fn handle_connection(mut stream: TcpStream) {
-    let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
+fn handle_connection(mut stream: TcpStream) -> Result<HttpRequest, String> {
+    let mut buffer = Vec::new();
 
-    println!("Request: {}", String::from_utf8_lossy(&buffer[..]));
-    let get = b"GET / HTTP/1.1\r\n";
-    let response = if buffer.starts_with(get) {
-        "HTTP/1.1 200 OK\r\n\r\n"
-    } else {
-        "HTTP/1.1 404 Not Found\r\n\r\n"
-    };
-    stream.write(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
+    match stream.read_to_end(&mut buffer) {
+        Ok(_) => {
+            let http_string = match String::from_utf8(buffer) {
+                Ok(s) => s,
+                Err(e) => {
+                    return Err(e.to_string());
+                }
+            };
+
+            return parse_http_string(&http_string);
+
+            // match parse_http_string(&http_string) {
+            //
+            // }
+        }
+        Err(e) => {
+            return Err(format!("Failed to read from stream: {e}"));
+        }
+    }
+
+    // let mut buffer = [0; 1024];
+    // stream.read(&mut buffer).unwrap();
+
+    // println!("Request: {}", String::from_utf8_lossy(&buffer[..]));
+    // let get = b"GET / HTTP/1.1\r\n";
+    // let response = if buffer.starts_with(get) {
+    //     "HTTP/1.1 200 OK\r\n\r\n"
+    // } else {
+    //     "HTTP/1.1 404 Not Found\r\n\r\n"
+    // };
+    // stream.write(response.as_bytes()).unwrap();
+    // stream.flush().unwrap();
 }
 
 fn parse_http_string(http_string: &str) -> Result<HttpRequest, String> {
-    let vector_str: Vec<&str> = http_string.split("\r\n").collect();
+    let mut lines = http_string.split("\r\n").peekable();
+    let request_line = lines.next().ok_or("Request line missing")?;
 
-    let request_line;
-
-    // let body;
-
-    if let Some(request_line_str) = vector_str.get(0) {
-        let parts: Vec<&str> = request_line_str.split_whitespace().collect();
-        request_line = RequestLine {
-            method: Some(parts.get(0).unwrap_or(&"").to_string()),
-            target: Some(parts.get(1).unwrap_or(&"").to_string()),
-            version: Some(parts.get(2).unwrap_or(&"").to_string()),
-        }
-    } else {
-        return Err("Do not have request_line!".to_string());
+    let parts: Vec<&str> = request_line.split_whitespace().collect();
+    if parts.len() != 3 {
+        return Err("Invalid request line".to_string());
     }
 
-    let mut headers = Header {
-        host: None,
-        user_agent: None,
-        accept: None,
+    let request_line = RequestLine {
+        method: parts[0].to_string(),
+        uri: parts[1].to_string(),
+        version: parts[2].to_string(),
     };
 
-    for header_str in vector_str.iter().skip(1) {
-        // Skip the request line
-        if header_str.starts_with("Host: ") {
-            headers.host = Some(header_str.replace("Host: ", ""));
-        } else if header_str.starts_with("User-Agent: ") {
-            headers.user_agent = Some(header_str.replace("User-Agent: ", ""));
-        } else if header_str.starts_with("Accept: ") {
-            headers.accept = Some(header_str.replace("Accept: ", ""));
+    let mut headers = Vec::new();
+    while let Some(&line) = lines.peek() {
+        if line.is_empty() {
+            lines.next();
+            break;
         }
+        let header_parts: Vec<&str> = line.splitn(2, ':').collect();
+        if header_parts.len() != 2 {
+            return Err("Invalid Header".to_string());
+        }
+        headers.push(Header {
+            key: header_parts[0].to_string(),
+            value: header_parts[1].to_string(),
+        });
+        lines.next();
     }
 
-    if headers.host.is_none() || headers.user_agent.is_none() || headers.accept.is_none() {
-        return Err("Missing required headers".to_string());
-    }
+    let body = if lines.peek().is_some() {
+        Some(lines.collect::<Vec<&str>>().join("\r\n"))
+    } else {
+        None
+    };
 
-    return Ok(HttpRequest {
-        request_line: Some(request_line),
-        headers: Some(headers),
-        body: None,
-    });
+    Ok(HttpRequest {
+        request_line,
+        headers,
+        body,
+    })
 }
