@@ -39,10 +39,18 @@ fn main() {
 
     for stream in listener.incoming() {
         match stream {
-            Ok(mut _stream) => match handle_connection(_stream) {
+            Ok(mut _stream) => match handle_connection(&mut _stream) {
                 Ok(request) => {
                     if request.request_line.uri.contains("echo/") {
-                        let path = request.request_line.uri.splitn(2, "echo/").collect::<Vec<&str>>()[1];
+                        let path = request
+                            .request_line.uri.splitn(2, "echo/").collect::<Vec<&str>>()[1];
+
+                        let content_length = path.len();
+                        
+                        let response_str = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {content_length}\r\n\r\n{path}");
+
+                        _stream.write(response_str.as_bytes()).unwrap();
+                        _stream.flush().unwrap();
                     }
                 }
                 Err(e) => {
@@ -56,7 +64,7 @@ fn main() {
     }
 }
 
-fn handle_connection(mut stream: TcpStream) -> Result<HttpRequest, String> {
+fn handle_connection(stream: &mut TcpStream) -> Result<HttpRequest, String> {
     let mut buffer = Vec::new();
 
     match stream.read_to_end(&mut buffer) {
@@ -69,10 +77,6 @@ fn handle_connection(mut stream: TcpStream) -> Result<HttpRequest, String> {
             };
 
             return parse_http_string(&http_string);
-
-            // match parse_http_string(&http_string) {
-            //
-            // }
         }
         Err(e) => {
             return Err(format!("Failed to read from stream: {e}"));
