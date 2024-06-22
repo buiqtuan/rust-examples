@@ -49,6 +49,7 @@ fn main() {
                         
                         let response_str = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {content_length}\r\n\r\n{path}");
 
+                        //unwrap here to hire some warning on some errors might not be handled correctly.
                         _stream.write(response_str.as_bytes()).unwrap();
                         _stream.flush().unwrap();
                     }
